@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Demo</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta content="telephone=no" name="format-detection">
+    <meta name="viewport"
+        content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no">
+
+    <!--库-->
+    <script type="text/javascript" src="/js/remauto.js"></script>
+
+
+    <!-- 引入样式文件 -->
+    <link rel="stylesheet" href="/css/vant_index@2.8rem.css" />
+    <style>
+        /*自定义滚动条的伪对象选择器, CSS 可以隐藏滚动条*/
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        .left-container {
+            margin-top: 0rem;
+        }
+
+        .right-container {
+            padding-right: 0rem;
+        }
+
+        .main-container {
+            padding: 1rem 1rem 1rem 1rem;
+        }
+
+        .main-container .head-img {
+            width: 100%;
+        }
+
+
+        .van-cell__title {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .file-list {
+            padding: 1rem 0rem 0rem 0rem;
+        }
+
+        a,
+        a:link,
+        a:visited {
+            text-decoration: none;
+        }
+    </style>
+    <script type="text/javascript" language="javascript">
+
+        function Init() {
+            fn_InitVue();
+        }
+        function getExt(filePath) {
+            //获取最后一个.的位置
+            var index = filePath.lastIndexOf(".");
+            //获取后缀
+            var ext = filePath.substr(index + 1);
+            return ext;
+        }
+
+        function fn_InitVue() {
+
+            vueObj = new Vue({
+                el: '#app',
+                data: {
+                    fileList: [],
+                    fileIn: [],
+                    fileOut: [],
+                    ALLFileArr: [],
+                    isRunning:false,
+                    maxHeightMain: (window.innerHeight - 100) + 'px',
+                },
+                methods: {
+
+                    afterRead(file) {
+                        // 此时可以自行将文件上传至服务器
+                        var vueObj = this;
+
+                        if (file instanceof Array) {//多附件上传
+                            for (var i = 0; i < file.length; i++) {
+                                vueObj.FJinitData(file[i], vueObj, 1);
+                            }
+                        } else {//单附件上传
+                            vueObj.FJinitData(file, vueObj, 1);
+                        }
+                    },
+                    FJinitData(file, vueObj, FJType) {
+                        var form = new FormData();
+                        // form.append("name", "附件");
+                        form.append("file", file.file);
+
+                        file.status = 'uploading';
+                        file.message = '上传中...';
+                        vueObj.fn_upload(form, function (jsonData) {
+                            vueObj.fileList.splice(0, vueObj.fileList.length);
+                            vueObj.fileOut.splice(0, vueObj.fileOut.length);
+                            if (jsonData instanceof Object && jsonData.resultCode == 0) {
+                                file.status = 'done';
+                                file.message = '上传成功';
+                                // vant.Dialog.alert({
+                                //     title: '提示',
+                                //     message: "上传成功",
+                                // }).then(() => {
+                                // });
+                                vueObj.isRunning=true;
+                                vant.Toast.loading({
+                                    duration: 0, // 持续展示 toast
+                                    forbidClick: true,
+                                    position: 'top',
+                                    message: '正在加固请稍后',
+                                });
+                                return;
+                            }
+
+                            file.status = 'failed';
+                            file.message = '上传失败';
+                            vant.Dialog.alert({
+                                title: '提示',
+                                message: "上传失败",
+                            }).then(() => {
+                            });
+
+                        });
+                    },
+                    fn_upload(form, callBackFun) {
+
+                        $.ajax({
+                            url: "/FMFileInfo/UploadingStream",
+                            data: form,
+                            type: "POST",
+                            // 告诉jQuery不要去处理发送的数据，用于对data参数进行序列化处理 这里必须false 
+                            processData: false,
+                            // 告诉jQuery不要去设置Content-Type请求头
+                            contentType: false,
+                            dataType: "json",
+                            success: function (jsonData) {
+                                callBackFun(jsonData);
+                            },
+                            error: function (jsonData) {
+                                callBackFun(jsonData);
+                            }
+                        });
+                    },
+                    getFileIn: function () {
+                        vueObj.fn_getallfile("FMFileInfo", function (jsonData) {
+                            if (jsonData instanceof Object && jsonData.resultCode == 0) {
+                                var fileArr = jsonData.resultBody;
+
+                                for (var i = 0; i < fileArr.length; i++) {
+                                    var fileObj = fileArr[i];
+                                    if (vueObj.fileIn.indexOf(fileObj.name) == -1) {
+                                        vueObj.fileIn.push(fileObj.name);
+
+                                    }
+                                }
+
+                                return;
+                            }
+                        });
+                    },
+                    getFileOut: function () {
+                        if(!vueObj.isRunning){return;}
+                        vueObj.fn_getallfile("FMFileInfoOut", function (jsonData) {
+                            if (jsonData instanceof Object && jsonData.resultCode == 0) {
+                                var fileArr = jsonData.resultBody;
+                                var isComplate = false;
+                                for (var i = 0; i < fileArr.length; i++) {
+                                    var fileObj = fileArr[i];
+                                    var ext = getExt(fileObj.name);
+
+                                    if (vueObj.ALLFileArr.indexOf(fileObj.name) == -1) {
+                                        if (ext == "log" ) {
+                                            isComplate = true;
+                                        }
+                                        vueObj.ALLFileArr.push(fileObj.name);
+                                    }
+
+                                    if (ext == "apk"&&vueObj.fileOut.indexOf(fileObj.name) == -1) {
+                                        vueObj.fileOut.push(fileObj.name);
+
+                                    }
+                                }
+
+                                if (isComplate) {
+                                    vueObj.isRunning=false;
+                                    vant.Toast.clear();
+                                    vant.Dialog.alert({
+                                        title: '提示',
+                                        message: "加固成功",
+                                    }).then(() => {
+                                    });
+                                }
+                                return;
+                            }
+                        });
+                    },
+                    fn_getallfile(name, callBackFun) {
+
+                        $.ajax({
+                            url: "/FMFileInfo/getallfile/" + name,
+                            data: null,
+                            type: "GET",
+                            // 告诉jQuery不要去处理发送的数据，用于对data参数进行序列化处理 这里必须false 
+                            processData: false,
+                            // 告诉jQuery不要去设置Content-Type请求头
+                            contentType: false,
+                            dataType: "json",
+                            success: function (jsonData) {
+                                callBackFun(jsonData);
+                            },
+                            error: function (jsonData) {
+                                callBackFun(jsonData);
+                            }
+                        });
+                    },
+                    downloadFile: function (name) {
+                        var url = "/FMFileInfo/download/" + name;
+                        window.open(url);
+                    },
+                },
+                computed: {
+                    disabled() {
+                        return this.loading || this.noMore
+                    }
+                },
+                mounted: function () {
+                    var vueObjTemp = this;
+                    setTimeout(function () {
+                        vueObjTemp.maxHeightMain = (window.innerHeight - $(".top-container").outerHeight() - $("#footerid").outerHeight() - 5) + 'px';
+                    }, 1000);
+                    setInterval(function () {
+                        // vueObjTemp.getFileIn();
+                        vueObjTemp.getFileOut();
+                    }, 2000);
+
+                }
+            });
+
+
+        }
+
+    </script>
+</head>
+
+<body onload="Init()">
+    <div id="app">
+        <van-row>
+            <van-col class="left-container" span="0" style="display:none;">
+
+            </van-col>
+            <van-col class="right-container" span="24">
+                <van-row class="top-container">
+
+                </van-row>
+                <van-row class="main-container">
+                    <van-col span="24" style="text-align: center;">
+                        <template>
+                            <van-tag type="warning">APK加固样例</van-tag>
+                        </template>
+                    </van-col>
+                    <van-col span="24" style="text-align: center;padding: 1rem 0rem 1rem 0rem;">
+                        <template>
+                            <van-uploader upload-text="点击上传APK" :deletable="false" :after-read="afterRead"
+                                :max-count="1" :max-size="100 *1024* 1024" v-model="fileList" :accept="'.apk'">
+                            </van-uploader>
+                        </template>
+                    </van-col>
+                    <!-- <van-col span="12">
+                        <template>
+                            <div><span>输入目录</span></div>
+                            <div v-for="(name,index) in fileIn" :key="name" @click="downloadFile('FMFileInfoIn/'+name)">
+                                {{name}}
+                            </div>
+                        </template>
+                    </van-col> -->
+                    <van-col span="24">
+                        <template>
+                            <div><span style="font-size: 1rem;">已加固输出文件：</span>
+                                <span style="font-size: 0.5rem;">（默认仅加固所有onCreat命名函数）</span>
+                            </div>
+                            <van-row class="file-list" v-for="(name,index) in fileOut" :key="name">
+                                <van-col span="20">
+                                    <van-tag type="success">{{name}}</van-tag>
+                                </van-col>
+                                <van-col span="4">
+                                    <van-tag type="danger" @click="downloadFile('FMFileInfoOut/'+name)">下载</van-tag>
+                                </van-col>
+
+                            </van-row>
+
+                        </template>
+                    </van-col>
+                </van-row>
+            </van-col>
+
+        </van-row>
+    </div>
+
+    <!-- import Vue before Element -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vant@2.8/lib/vant.min.js"></script>
+</body>
+
+</html>
